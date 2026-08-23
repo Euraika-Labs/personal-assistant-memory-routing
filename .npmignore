@@ -1,0 +1,3 @@
+test/
+*.tgz
+npm-debug.log*

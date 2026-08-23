@@ -1,0 +1,57 @@
+{
+  "name": "@euraika-labs/personal-assistant-memory-routing",
+  "version": "0.3.0",
+  "description": "Portable Agent Skill and privacy-first multi-provider memory routing for Claude Code and Codex",
+  "type": "module",
+  "bin": {
+    "pamr": "bin/pamr.mjs",
+    "personal-assistant-routing": "bin/pamr.mjs"
+  },
+  "files": [
+    "bin/",
+    "runtime/",
+    "skill/",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/pamr.mjs && node --check runtime/assistant-hook.mjs && npm test && npm pack --dry-run",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "agent-skill",
+    "claude-code",
+    "claude-mem",
+    "claude-memory",
+    "codex",
+    "codex-cli",
+    "hooks",
+    "mem0",
+    "memory",
+    "nowledge-mem",
+    "persistent-memory",
+    "privacy"
+  ],
+  "author": "Euraika Labs <info@euraika.net> (https://www.euraika.net)",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Euraika-Labs/personal-assistant-memory-routing.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Euraika-Labs/personal-assistant-memory-routing/issues"
+  },
+  "homepage": "https://github.com/Euraika-Labs/personal-assistant-memory-routing#readme",
+  "contributors": [
+    "Bert Colemont (@anubissbe)"
+  ]
+}
