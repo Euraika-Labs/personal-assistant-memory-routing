@@ -18,7 +18,8 @@
   "scripts": {
     "test": "node --test",
     "check": "node --check bin/pamr.mjs && node --check runtime/assistant-hook.mjs && npm test && npm pack --dry-run",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "npm pack --dry-run",
+    "release:check": "node scripts/verify-release.mjs"
   },
   "engines": {
     "node": ">=20"
