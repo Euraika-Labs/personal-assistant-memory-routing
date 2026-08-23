@@ -7,7 +7,7 @@
 
 A portable Agent Skill and review-first installer that gives Claude Code and Codex concise response routing plus bounded, privacy-aware recall from multiple memory systems.
 
-> **Release status:** the repository contains version 0.3.0. The npm `latest` tag may still point to 0.2.0 until 0.3.0 is explicitly published.
+> **Release status:** npm and GitHub releases are produced from protected semantic-version tags after the full release checks pass.
 
 ## Why
 
@@ -155,6 +155,7 @@ Only exact owned hooks and marked skill files are removed. Backups remain beside
 - [Install and rollback](skill/personal-assistant-memory-routing/references/INSTALL.md)
 - [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
+- [Release process](docs/RELEASING.md)
 
 ## License
 

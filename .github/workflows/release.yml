@@ -1,26 +1,144 @@
-name: Publish npm
+name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*.*.*"
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release:
+    name: Publish npm and GitHub Release
     runs-on: ubuntu-latest
     environment: npm
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
+      - name: Resolve release commit
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Invalid release tag: $TAG" >&2; exit 1 ;;
+          esac
+          object="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          sha="$(printf '%s' "$object" | jq -r .object.sha)"
+          type="$(printf '%s' "$object" | jq -r .object.type)"
+          while [ "$type" = "tag" ]; do
+            object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${sha}")"
+            sha="$(printf '%s' "$object" | jq -r .object.sha)"
+            type="$(printf '%s' "$object" | jq -r .object.type)"
+          done
+          if [ "$type" != "commit" ]; then
+            echo "${TAG} does not resolve to a commit" >&2
+            exit 1
+          fi
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.ref.outputs.sha }}
+          persist-credentials: false
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm publish --access public --provenance
+
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@11.6.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag, version, and changelog
+        run: node scripts/verify-release.mjs "$TAG"
+
+      - name: Run release checks
+        run: npm run check
+
+      - name: Pack release asset
+        id: pack
+        run: |
+          set -euo pipefail
+          npm pack --json > pack-result.json
+          tarball="$(node -e "const fs=require('node:fs'); const p=JSON.parse(fs.readFileSync('pack-result.json','utf8')); process.stdout.write(p[0].filename)")"
+          shasum -a 256 "$tarball" > SHA256SUMS.txt
+          printf 'tarball=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Attest release package
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: ${{ steps.pack.outputs.tarball }}
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package-${{ env.TAG }}
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create or update draft GitHub Release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TARBALL" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$TARBALL" SHA256SUMS.txt \
+              --draft \
+              --generate-notes \
+              --target "${{ steps.ref.outputs.sha }}" \
+              --title "$TAG" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Publish to npm with trusted publishing
+        id: publish
+        run: |
+          set -euo pipefail
+          package="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "${package}@${version}" version --json >/dev/null 2>&1; then
+            echo "${package}@${version} already exists; skipping npm publish."
+            printf 'published=false\n' >> "$GITHUB_OUTPUT"
+          else
+            npm publish --access public --provenance
+            printf 'published=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify npm publication
+        run: |
+          set -euo pipefail
+          package="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          for attempt in 1 2 3 4 5 6; do
+            actual="$(npm view "${package}@${version}" version --json 2>/dev/null | tr -d '"' || true)"
+            if [ "$actual" = "$version" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "npm did not expose ${package}@${version} after publication" >&2
+          exit 1
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
